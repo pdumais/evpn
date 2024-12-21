@@ -1,0 +1,9 @@
+logs
+tmp
+gobgp
+gobgp-host*.conf
+gobgpd
+todo
+*.pb.*
+*.a
+
