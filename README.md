@@ -38,15 +38,36 @@ gobgp global rib -a evpn add prefix 10.0.0.104/32 etag 1 rd 65004:100
 This prefix will get added in the local RIB and advertised to the controller and then back down to all other hypervisors.
 
 ## Lab environment
-To make this test easier to run, I am created a virtual environment using network namespaces in linux instead of using hypervisors and VMs. That simulation is a good proof of concept to show how it can work with virtual machines, but also shows that it can be used for container environments.
+To make this test easier to run, I am creating a virtual environment using network namespaces in linux instead of using hypervisors and VMs. That simulation is a good proof of concept to show how it can work with virtual machines, but also shows that it can be used for container environments.
 
-TODO: diagram of network namespaces
 
+![](namespaces.png "Simulation")
+
+The shaded boxes are veth pairs. We can see we have a total of 13 namespaces. 
+
+```
+pat@pat:~/projects/evpn$ sudo ip netns | grep evpn
+evpn-controller (id: 17)
+evpn-1 (id: 19)
+evpn-e11
+evpn-e12
+evpn-e13
+evpn-2 (id: 20)
+evpn-e21
+evpn-e22
+evpn-e23
+evpn-3 (id: 21)
+evpn-e31
+evpn-e32
+evpn-e33
+```
+
+The interfaces within the evpn-e11 to evpn-e33 are endpoints similar to vms. evpn-1, evpn-2 and evpn-3 are a simulation of the hypervisors. br-evpn is a bridge on the host that simulates the layer3 network from a cloud operator.
 
 # Running the test
 ## Building the agent
 These steps have been done on a ubuntu VM. The Makefile will use `apt install` to install the required dependencies. The host agent is a c++ application
-that communicates with gobgp thru a grpc channel. It monitors changes in the RIB and creates FDB entries for vteps.
+that communicates with gobgp thru a grpc channel. It monitors changes in the RIB and creates FDB entries for vteps. It is necessary to build the agent before deploying the lab
 ```
 cd host-agent
 make install-deps
@@ -54,55 +75,97 @@ make build
 ```
 
 ## Creating the virtual lab
-make install-gobgp
+The next step is to install gobgp locally. This is done with `make install-gobgp`.
+And then we can deploy the lab with `make rebuild-lab`. After starting the lab, we should see all the namespaces and veth pairs created. After the lab is up, we can run `make tail-logs`. This will bring up a tmux session with a few windows to view logs.
 
-TODO: show "make logs" to monitor
+![](logs1.png "Simulation")
+We can see here that the controller instance of gobgp has 3 peers in "established" state. and we can see it received 3 prefixes. The 3 windows on the right show that everyone received prefixes from everyone. So everything is in sync.
+
+We can run `make test` to check that everyone can ping each other from within their own bridge (without going thru vxlan)
+```
+pat@pat:~/projects/evpn$ make test
+./test-internal.sh 1 3 
+Testing that endpoints on same host can ping each other
+Ping 10.100.1.102 from 10.100.1.101  Pass
+Ping 10.100.1.103 from 10.100.1.101  Pass
+Ping 10.100.1.101 from 10.100.1.102  Pass
+Ping 10.100.1.103 from 10.100.1.102  Pass
+Ping 10.100.1.101 from 10.100.1.103  Pass
+Ping 10.100.1.102 from 10.100.1.103  Pass
+./test-internal.sh 2 3 
+Testing that endpoints on same host can ping each other
+Ping 10.100.2.102 from 10.100.2.101  Pass
+Ping 10.100.2.103 from 10.100.2.101  Pass
+Ping 10.100.2.101 from 10.100.2.102  Pass
+Ping 10.100.2.103 from 10.100.2.102  Pass
+Ping 10.100.2.101 from 10.100.2.103  Pass
+Ping 10.100.2.102 from 10.100.2.103  Pass
+./test-internal.sh 3 3 
+Testing that endpoints on same host can ping each other
+Ping 10.100.3.102 from 10.100.3.101  Pass
+Ping 10.100.3.103 from 10.100.3.101  Pass
+Ping 10.100.3.101 from 10.100.3.102  Pass
+Ping 10.100.3.103 from 10.100.3.102  Pass
+Ping 10.100.3.101 from 10.100.3.103  Pass
+Ping 10.100.3.102 from 10.100.3.103  Pass
+```
+
+This is good. But what about being able to ping across the overlay? We can check that the host-agent has received the prefix advertisements and has installed the proper FDB entries:
+```
+pat@pat:~$ sudo ip netns exec evpn-1 bridge fdb show | grep "00:00:00:00:00:00"
+00:00:00:00:00:00 dev vxlan1 dst 10.0.0.102 self permanent
+00:00:00:00:00:00 dev vxlan1 dst 10.0.0.103 self permanent
+```
+
+So this should work. Let's ping from one host to the other:
+```
+pat@pat:~$ sudo ip netns exec evpn-e21 ping 10.100.3.101
+PING 10.100.3.101 (10.100.3.101) 56(84) bytes of data.
+64 bytes from 10.100.3.101: icmp_seq=1 ttl=64 time=0.112 ms
+64 bytes from 10.100.3.101: icmp_seq=2 ttl=64 time=0.139 ms
+```
+
+And now here's a fun experiment: What happens if I kill the gobgp instance in namespace evpn-3 ? I would exect that because the controller has lost its connection to that neighbor, it would withdraw a route from evpn-1 and evpn-2. And That vtep would in turn be removed from the FDB.
+
+```
+# RIB looks good
+pat@pat:~$ ip netns exec evpn-1 ./gobgp global rib -a evpn
+   Network                                                   Labels     Next Hop             AS_PATH              Age        Attrs
+*> [type:Prefix][rd:65001:100][etag:1][prefix:10.0.0.101/32] [0]        0.0.0.0                                   00:01:59   [{Origin: ?} [ESI: single-homed] [GW: 0.0.0.0]]
+*> [type:Prefix][rd:65003:100][etag:1][prefix:10.0.0.103/32] [0]        10.0.0.10            64512 65003          00:01:52   [{Origin: ?} [ESI: single-homed] [GW: 0.0.0.0]]
+*> [type:Prefix][rd:65002:100][etag:1][prefix:10.0.0.102/32] [0]        10.0.0.10            64512 65002          00:01:51   [{Origin: ?} [ESI: single-homed] [GW: 0.0.0.0]]
+
+# FDB Looks good
+pat@pat:~$ ip netns exec evpn-1 bridge fdb show | grep "00:00:00:00:00:00"
+00:00:00:00:00:00 dev vxlan1 dst 10.0.0.103 self permanent
+00:00:00:00:00:00 dev vxlan1 dst 10.0.0.102 self permanent
+
+# Kill the gobgp server running in evpn-3
+pat@pat:~$ kill -9 1542904 
+
+# The RIB is now missing the route for 10.0.0.103
+pat@pat:~$ ip netns exec evpn-1 ./gobgp global rib -a evpn
+   Network                                                   Labels     Next Hop             AS_PATH              Age        Attrs
+*> [type:Prefix][rd:65002:100][etag:1][prefix:10.0.0.102/32] [0]        10.0.0.10            64512 65002          00:03:46   [{Origin: ?} [ESI: single-homed] [GW: 0.0.0.0]]
+*> [type:Prefix][rd:65001:100][etag:1][prefix:10.0.0.101/32] [0]        0.0.0.0                                   00:03:54   [{Origin: ?} [ESI: single-homed] [GW: 0.0.0.0]]
+
+# The FDB is now missing the entry for 10.0.0.103
+pat@pat:~/projects/evpn$ sudo ip netns exec evpn-1 bridge fdb show | grep "00:00:00:00:00:00"
+00:00:00:00:00:00 dev vxlan1 dst 10.0.0.102 self permanent
+
+```
+
+
+# Future improvements
+We can also take advantage of EVPN Type2 routes to create all ARP entries as new VMs are spun up. This will remove the need from broadcasting ARP queries across all hosts.
+
+I also want to add support for multiple overlays to split traffic into different domains. 
 
 
 
-TODO: added bonus of evpn is Type2 routes to remove the need for ARP
-
-TODO: Test after VMs are up
-    local rib contains vtep
-    other servers are now aware of the new prefix
-    FDB on other servers and this one is all in sync
-    can ping between VMs: only goes thru the bridge
-    can ping across: We see vxlan traffic. And it is not broadcast.
-    kill one server: RIB and FDB updated everywhere.
 
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-gobgp global rib -a evpn add macadv 00:00:00:00:00:00 10.0.100.101 [esi <esi>] etag <etag> label <label> rd <rd> [rt <rt>...] [encap <encap type>] [default-gateway]
-
-# Show routes
-$ gobgp global rib -a evpn [macadv]
-
-# Delete route
-$ gobgp global rib -a evpn del macadv <mac address> <ip address> [esi <esi>] etag <etag> label <label> rd <rd>
-
-
-sudo ip netns exec evpn-controller ./gobgp global rib -a evpn add prefix 10.0.0.101/32 etag 1 rd 65001:100
-sudo ip netns exec evpn-controller ./gobgp global rib -a evpn add prefix 10.0.0.102/32 etag 1 rd 65002:100
-sudo ip netns exec evpn-controller ./gobgp global rib -a evpn add prefix 10.0.0.103/32 etag 1 rd 65003:100
-
-
-sudo ip netns exec evpn-controller ./gobgp global rib -a evpn
-sudo ip netns exec evpn-1 ./gobgp global rib -a evpn
-sudo ip netns exec evpn-2 ./gobgp global rib -a evpn
-sudo ip netns exec evpn-3 ./gobgp global rib -a evpn
 

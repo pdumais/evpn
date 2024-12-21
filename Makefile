@@ -41,13 +41,14 @@ destroy-controller:
 
 kill-bgp:
 	- killall gobgpd	
+	- killall host_agent
 
 #
 # Main commands
 #
 #
 build:
-	cd host_agent && make
+	cd host-agent && make
 
 create-lab: create-host-infra create-controller 1.create-hosts 2.create-hosts 3.create-hosts
 destroy-lab: kill-bgp destroy-controller 1.destroy-hosts 2.destroy-hosts 3.destroy-hosts
@@ -82,11 +83,11 @@ install-gobgp:
 tail-logs:
 	- tmux kill-session -t logsession
 	tmux new-session -d -s logsession "tail -F ./logs/gobgpd.log"
-	tmux split-window -t logsession -v "watch ip netns exec evpn-controller ./gobgp neighbor"
-	tmux split-window -t logsession -h  "watch ip netns exec evpn-1 ./gobgp global rib -a evpn"
-	tmux split-window -t logsession -v "watch ip netns exec evpn-2 ./gobgp global rib -a evpn"
-	tmux split-window -t logsession -v "watch ip netns exec evpn-3 ./gobgp global rib -a evpn"
-	tmux split-window -t logsession:0.1 -v "watch ip netns exec evpn-controller ./gobgp global rib -a evpn"
+	tmux split-window -t logsession -v "watch -t ip netns exec evpn-controller ./gobgp neighbor"
+	tmux split-window -t logsession -h  "watch -t ip netns exec evpn-1 ./gobgp global rib -a evpn"
+	tmux split-window -t logsession -v "watch -t ip netns exec evpn-2 ./gobgp global rib -a evpn"
+	tmux split-window -t logsession -v "watch -t ip netns exec evpn-3 ./gobgp global rib -a evpn"
+	tmux split-window -t logsession:0.1 -v "watch -t ip netns exec evpn-controller ./gobgp global rib -a evpn"
 	
 	#tmux resize-pane -t logsession:0.1 -y 70
 	tmux attach-session -t logsession

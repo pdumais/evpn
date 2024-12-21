@@ -49,3 +49,5 @@ nohup ip netns exec evpn-${NUM} ./gobgpd -f gobgp-host${NUM}.conf > ./logs/gobgp
 sleep 0.5
 # Advertise VTEP
 ip netns exec evpn-${NUM} ./gobgp global rib -a evpn add prefix 10.0.0.$((100 + NUM))/32 etag 1 rd $((65000 + NUM)):100
+
+nohup ip netns exec evpn-${NUM} ./host-agent/host_agent > ./logs/host-agent${NUM}.log 2>&1 &

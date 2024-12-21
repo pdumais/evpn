@@ -67,15 +67,20 @@ void GobgpClient::watch_routes()
                 {
                     for (auto a : path.pattrs())
                     {
-
                         // if the AS path is not empty, then it means the route is not a local one. So we should be handling this vtep
                         apipb::AsPathAttribute aspath;
                         if (a.UnpackTo(&aspath))
                         {
                             if (aspath.segments().size() != 0)
                             {
-                                std::cout << "Accepting route advertisement: " << routePrefix.ip_prefix() << std::endl;
-                                this->mDataPlane->add_vtep(routePrefix.ip_prefix());
+                                if (path.is_withdraw())
+                                {
+                                    this->mDataPlane->remove_vtep(routePrefix.ip_prefix());
+                                }
+                                else
+                                {
+                                    this->mDataPlane->add_vtep(routePrefix.ip_prefix());
+                                }
                             }
                         }
                     }
