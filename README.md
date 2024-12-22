@@ -33,9 +33,9 @@ In this diagram, the orange links represent a BGP channel and the green links ar
 
 When we create a new hypervisor, we have a script that creates the bridge and the vxlan interface, spins up the host-agent and gobgp. The script will then invoke the gobgp client tool to advertise the new vtep that was created. For example, if we add a fourth server:
 ```
-gobgp global rib -a evpn add prefix 10.0.0.104/32 etag 1 rd 65004:100
+gobgp global rib -a evpn add multicast 10.0.0.104 etag 0 rd 10.0.0.104:0 encap vxlan pmsi ingress-repl 0 10.0.0.104
 ```
-This prefix will get added in the local RIB and advertised to the controller and then back down to all other hypervisors.
+This vtep address will get added in the local RIB and advertised to the controller and then back down to all other hypervisors.
 
 ## Lab environment
 To make this test easier to run, I am creating a virtual environment using network namespaces in linux instead of using hypervisors and VMs. That simulation is a good proof of concept to show how it can work with virtual machines, but also shows that it can be used for container environments.
@@ -79,7 +79,7 @@ The next step is to install gobgp locally. This is done with `make install-gobgp
 And then we can deploy the lab with `make rebuild-lab`. After starting the lab, we should see all the namespaces and veth pairs created. After the lab is up, we can run `make tail-logs`. This will bring up a tmux session with a few windows to view logs.
 
 ![](logs1.png "Simulation")
-We can see here that the controller instance of gobgp has 3 peers in "established" state. and we can see it received 3 prefixes. The 3 windows on the right show that everyone received prefixes from everyone. So everything is in sync.
+We can see here that the controller instance of gobgp has 3 peers in "established" state. and we can see it received 3 routes. The 3 windows on the right show that everyone received routes from everyone. So everything is in sync.
 
 We can run `make test` to check that everyone can ping each other from within their own bridge (without going thru vxlan)
 ```
@@ -110,7 +110,7 @@ Ping 10.100.3.101 from 10.100.3.103  Pass
 Ping 10.100.3.102 from 10.100.3.103  Pass
 ```
 
-This is good. But what about being able to ping across the overlay? We can check that the host-agent has received the prefix advertisements and has installed the proper FDB entries:
+This is good. But what about being able to ping across the overlay? We can check that the host-agent has received the mac advertisements and has installed the proper FDB entries:
 ```
 pat@pat:~$ sudo ip netns exec evpn-1 bridge fdb show | grep "00:00:00:00:00:00"
 00:00:00:00:00:00 dev vxlan1 dst 10.0.0.102 self permanent
@@ -130,10 +130,11 @@ And now here's a fun experiment: What happens if I kill the gobgp instance in na
 ```
 # RIB looks good
 pat@pat:~$ ip netns exec evpn-1 ./gobgp global rib -a evpn
-   Network                                                   Labels     Next Hop             AS_PATH              Age        Attrs
-*> [type:Prefix][rd:65001:100][etag:1][prefix:10.0.0.101/32] [0]        0.0.0.0                                   00:01:59   [{Origin: ?} [ESI: single-homed] [GW: 0.0.0.0]]
-*> [type:Prefix][rd:65003:100][etag:1][prefix:10.0.0.103/32] [0]        10.0.0.10            64512 65003          00:01:52   [{Origin: ?} [ESI: single-homed] [GW: 0.0.0.0]]
-*> [type:Prefix][rd:65002:100][etag:1][prefix:10.0.0.102/32] [0]        10.0.0.10            64512 65002          00:01:51   [{Origin: ?} [ESI: single-homed] [GW: 0.0.0.0]]
+   Network                                                  Labels     Next Hop             AS_PATH              Age        Attrs
+*> [type:multicast][rd:10.0.0.101:0][etag:0][ip:10.0.0.101]            0.0.0.0                                   00:05:55   [{Origin: ?} {Extcomms: [VXLAN]} {Pmsi: type: ingress-repl, label: 0, tunnel-id: 10.0.0.101}]
+*> [type:multicast][rd:10.0.0.102:0][etag:0][ip:10.0.0.102]            10.0.0.10            64512 65002          00:05:50   [{Origin: ?} {Extcomms: [VXLAN]} {Pmsi: type: ingress-repl, label: 0, tunnel-id: 10.0.0.102}]
+*> [type:multicast][rd:10.0.0.103:0][etag:0][ip:10.0.0.103]            10.0.0.10            64512 65003          00:05:48   [{Origin: ?} {Extcomms: [VXLAN]} {Pmsi: type: ingress-repl, label: 0, tunnel-id: 10.0.0.103}]
+
 
 # FDB Looks good
 pat@pat:~$ ip netns exec evpn-1 bridge fdb show | grep "00:00:00:00:00:00"
@@ -145,21 +146,16 @@ pat@pat:~$ kill -9 1542904
 
 # The RIB is now missing the route for 10.0.0.103
 pat@pat:~$ ip netns exec evpn-1 ./gobgp global rib -a evpn
-   Network                                                   Labels     Next Hop             AS_PATH              Age        Attrs
-*> [type:Prefix][rd:65002:100][etag:1][prefix:10.0.0.102/32] [0]        10.0.0.10            64512 65002          00:03:46   [{Origin: ?} [ESI: single-homed] [GW: 0.0.0.0]]
-*> [type:Prefix][rd:65001:100][etag:1][prefix:10.0.0.101/32] [0]        0.0.0.0                                   00:03:54   [{Origin: ?} [ESI: single-homed] [GW: 0.0.0.0]]
+   Network                                                  Labels     Next Hop             AS_PATH              Age        Attrs
+*> [type:multicast][rd:10.0.0.102:0][etag:0][ip:10.0.0.102]            10.0.0.10            64512 65002          00:10:27   [{Origin: ?} {Extcomms: [VXLAN]} {Pmsi: type: ingress-repl, label: 0, tunnel-id: 10.0.0.102}]
+*> [type:multicast][rd:10.0.0.101:0][etag:0][ip:10.0.0.101]            0.0.0.0                                   00:10:32   [{Origin: ?} {Extcomms: [VXLAN]} {Pmsi: type: ingress-repl, label: 0, tunnel-id: 10.0.0.101}]
+pat@pat:~/projects/evpn$ 
 
 # The FDB is now missing the entry for 10.0.0.103
 pat@pat:~/projects/evpn$ sudo ip netns exec evpn-1 bridge fdb show | grep "00:00:00:00:00:00"
 00:00:00:00:00:00 dev vxlan1 dst 10.0.0.102 self permanent
 
 ```
-
-
-# Future improvements
-We can also take advantage of EVPN Type2 routes to create all ARP entries as new VMs are spun up. This will remove the need from broadcasting ARP queries across all hosts.
-
-I also want to add support for multiple overlays to split traffic into different domains. 
 
 
 

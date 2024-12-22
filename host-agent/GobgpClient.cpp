@@ -62,9 +62,10 @@ void GobgpClient::watch_routes()
             const auto &table = response.table();
             for (const auto &path : table.paths())
             {
-                apipb::EVPNIPPrefixRoute routePrefix;
-                if (path.nlri().UnpackTo(&routePrefix))
+                apipb::EVPNInclusiveMulticastEthernetTagRoute route;
+                if (path.nlri().UnpackTo(&route))
                 {
+                    std::cout << "EVPNInclusiveMulticastEthernetTagRoute" << std::endl;
                     for (auto a : path.pattrs())
                     {
                         // if the AS path is not empty, then it means the route is not a local one. So we should be handling this vtep
@@ -75,11 +76,11 @@ void GobgpClient::watch_routes()
                             {
                                 if (path.is_withdraw())
                                 {
-                                    this->mDataPlane->remove_vtep(routePrefix.ip_prefix());
+                                    this->mDataPlane->remove_vtep(route.ip_address());
                                 }
                                 else
                                 {
-                                    this->mDataPlane->add_vtep(routePrefix.ip_prefix());
+                                    this->mDataPlane->add_vtep(route.ip_address());
                                 }
                             }
                         }

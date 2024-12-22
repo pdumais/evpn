@@ -1,0 +1,30 @@
+
+type 2 will be used to advertise the vtep and vni that a mac can be reached at
+    type 2: mac/vtep assciation:
+        sudo ip netns exec evpn-1 ./gobgp global rib -a evpn add macadv 11:22:33:44:55:66 0.0.0.0 etag 0 label 242 rd 192.168.1.2:242 nexthop 10.0.0.103 encap vxlan
+
+test: add a 4th host and see if all the plumbing was done automatically: Should be able to ping across hosts
+
+multiple overlays (VRF)
+    using VNI
+        split vlans on bridge
+        assign VNI to vlans. There is a a functioanlity to do this already in linux
+
+        when adding a vtep with type3, we would have multiple "00:00:00:00:00:00 -> vtep" but different vni.
+            the vxlan iface would be part of all vlans.
+            it would then need to map the source vlan to the right VNI. 
+                what if no vtep with such VNI defined?
+
+            When I have 2 entries like this:
+                00:00:00:00:00:00 dev vxlan1 dst 10.0.0.102 self permanent
+                00:00:00:00:00:00 dev vxlan1 dst 10.0.0.102 vni 243 self permanent
+            a broadcast (arp) would send out 1 vxlan per VNI, so I see 2.
+                so there must be a way to separate this using vlans
+
+
+
+
+
+
+--------------------------
+
