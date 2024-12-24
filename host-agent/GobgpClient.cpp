@@ -1,4 +1,17 @@
 #include "GobgpClient.h"
+#include <iostream>
+#include <string>
+#include <sstream>
+
+std::string bufferToIpAddress(const char* buffer) {
+    std::ostringstream ipStream;
+    ipStream << static_cast<unsigned int>(static_cast<unsigned char>(buffer[0])) << '.'
+             << static_cast<unsigned int>(static_cast<unsigned char>(buffer[1])) << '.'
+             << static_cast<unsigned int>(static_cast<unsigned char>(buffer[2])) << '.'
+             << static_cast<unsigned int>(static_cast<unsigned char>(buffer[3]));
+
+    return ipStream.str();
+}
 
 GobgpClient::GobgpClient(std::shared_ptr<grpc::Channel> channel)
     : mStub(apipb::GobgpApi::NewStub(channel))
@@ -65,27 +78,42 @@ void GobgpClient::watch_routes()
                 apipb::EVPNInclusiveMulticastEthernetTagRoute route;
                 if (path.nlri().UnpackTo(&route))
                 {
+                    apipb::PmsiTunnelAttribute pmsi;
+                    apipb::AsPathAttribute aspath;
+                    bool has_aspath = false;
+                    bool has_pmsi = false;
+                    int vni = 0;
+                    std::string vtep;
                     std::cout << "EVPNInclusiveMulticastEthernetTagRoute" << std::endl;
                     for (auto a : path.pattrs())
                     {
-                        // if the AS path is not empty, then it means the route is not a local one. So we should be handling this vtep
-                        apipb::AsPathAttribute aspath;
+                        if (a.UnpackTo(&pmsi))
+                        {
+                            vni = pmsi.label();
+                            vtep = bufferToIpAddress(pmsi.id().c_str());
+                            has_pmsi = true;
+                        }
+
                         if (a.UnpackTo(&aspath))
                         {
                             if (aspath.segments().size() != 0)
                             {
-                                if (path.is_withdraw())
-                                {
-                                    this->mDataPlane->remove_vtep(route.ip_address());
-                                }
-                                else
-                                {
-                                    this->mDataPlane->add_vtep(route.ip_address());
-                                }
+                                // if the AS path is not empty, then it means the route is not a local one. So we should be handling this vtep
+                                has_aspath = true;
                             }
                         }
                     }
-                    // TODO: Handle delete and adds
+                    if (has_aspath && has_pmsi)
+                    {
+                        if (path.is_withdraw())
+                        {
+                            this->mDataPlane->remove_vtep(vtep, vni);
+                        }
+                        else
+                        {
+                            this->mDataPlane->add_vtep(vtep, vni);
+                        }
+                    }
                 }
             }
         }

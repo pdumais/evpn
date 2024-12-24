@@ -14,9 +14,9 @@ DataPlane::DataPlane()
     this->mVxlanDevice = "vxlan1";
 }
 
-void DataPlane::add_vtep(const std::string &vtep_address)
+void DataPlane::add_vtep(const std::string &vtep_address, int vni)
 {
-    std::cout << "Accepting route advertisement: " << vtep_address << std::endl;
+    std::cout << "Accepting route advertisement: " << vtep_address << ":" << vni << std::endl;
 
     struct nl_sock *sock = nl_socket_alloc();
     int err = nl_connect(sock, NETLINK_ROUTE);
@@ -38,6 +38,7 @@ void DataPlane::add_vtep(const std::string &vtep_address)
 
     uint8_t mac_addr[6] = {0};
     nla_put(msg, NDA_LLADDR, sizeof(mac_addr), mac_addr);
+    nla_put_u32(msg, NDA_SRC_VNI, vni);
 
     struct in_addr ip_addr;
     inet_pton(AF_INET, vtep_address.c_str(), &ip_addr);
@@ -49,10 +50,10 @@ void DataPlane::add_vtep(const std::string &vtep_address)
     nl_socket_free(sock);
 }
 
-void DataPlane::remove_vtep(const std::string &vtep_address)
+void DataPlane::remove_vtep(const std::string &vtep_address, int vni)
 {
     // TODO: Delete prefix
-    std::cout << "Deleting prefix: " << vtep_address << std::endl;
+    std::cout << "Deleting prefix: " << vtep_address << ":" << vni <<  std::endl;
 
     struct nl_sock *sock = nl_socket_alloc();
     int err = nl_connect(sock, NETLINK_ROUTE);

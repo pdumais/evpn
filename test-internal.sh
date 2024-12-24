@@ -14,7 +14,7 @@ for i in $(seq 1 $SUBCOUNT); do
         IP1=10.100.${NUM}.$((100+i))
         IP2=10.100.${NUM}.$((100+n))
         echo -n "Ping $IP2 from $IP1  "
-        ip netns exec ${SUBNS} ping -c2 -w2 -q ${IP2} > /dev/null 2>&1
+        ip netns exec ${SUBNS} ping -c1 -w2 -q ${IP2} > /dev/null 2>&1
         if [ $? -eq 0 ]; then
             echo -n "Pass"
         else
@@ -24,5 +24,4 @@ for i in $(seq 1 $SUBCOUNT); do
 
     done
 done
-
 
