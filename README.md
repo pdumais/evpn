@@ -157,7 +157,45 @@ pat@pat:~/projects/evpn$ sudo ip netns exec evpn-1 bridge fdb show | grep "00:00
 
 ```
 
+# Multiple VNIs
+I modified my scripts again to support multiple VNIs. This way, I can create multiple overlays with isolated domains. This is useful for creating multiple broadcast domains.
+There is a way to add 1 single vxlan interface in a bridge and tunnel multiple VNIs at the same time. It is also possible to get the kernel to automatically map VLAN IDs to VNIs when traffic enters the vxlan interface. The procedure goes like this:
+- use the keyword "external" when creating the interface: `ip link add vxlan1 type vxlan dev eth0 dstport 4789 external`.
+- Enable vlan tunnels on the vxlan interface: `ip link set dev vxlan1 type bridge_slave vlan_tunnel on`
+- Enable vlan_filtering on the bridge: `ip link add name br0 type bridge vlan_filtering 1`
+- For each interface that we add to the bridge, set the right vlan: `bridge vlan add vid $VLAN pvid untagged dev veth`
 
+We must then create the tunnel mapping. We can create a 1:1 mapping but we could also, for example, want to map vlan 10 to VNI 40000. If we map 1:1, then we will be limited to 4096 VNIs. I am instead mapping an arbitrary number so that I can support the full range of VNI (16 millions) in my entire system but no more than 4096 per hosts. So when creating a new VM, if it gets assigned to a new VNI that doesn't exist yet, then it will be mapped to the next available vlan number on the host. If another VM gets created in a different host, it's possible that a different vlan mapping is created on that host. To create the mapping, we can do:
+```
+bridge vlan add dev vxlan1 vid ${VLAN}
+bridge vlan add dev vxlan1 vid  ${VLAN} tunnel_info id ${VNI}
+```
+
+The code in the repo now creates a total of 18 endpoint spread over 3 distinct overlays.
+The FDB now looks like this:
+```
+pat@pat:~$ sudo ip netns exec evpn-1 bridge fdb | grep "00:00:00:00:00:00"
+00:00:00:00:00:00 dev vxlan1 dst 10.0.0.102 src_vni 22003 self permanent
+00:00:00:00:00:00 dev vxlan1 dst 10.0.0.103 src_vni 22003 self permanent
+00:00:00:00:00:00 dev vxlan1 dst 10.0.0.103 src_vni 22001 self permanent
+00:00:00:00:00:00 dev vxlan1 dst 10.0.0.102 src_vni 22001 self permanent
+00:00:00:00:00:00 dev vxlan1 dst 10.0.0.102 src_vni 22002 self permanent
+00:00:00:00:00:00 dev vxlan1 dst 10.0.0.103 src_vni 22002 self permanent
+pat@pat:~$ sudo ip netns exec evpn-2 bridge fdb | grep "00:00:00:00:00:00"
+00:00:00:00:00:00 dev vxlan1 dst 10.0.0.103 src_vni 22003 self permanent
+00:00:00:00:00:00 dev vxlan1 dst 10.0.0.101 src_vni 22003 self permanent
+00:00:00:00:00:00 dev vxlan1 dst 10.0.0.103 src_vni 22001 self permanent
+00:00:00:00:00:00 dev vxlan1 dst 10.0.0.101 src_vni 22001 self permanent
+00:00:00:00:00:00 dev vxlan1 dst 10.0.0.103 src_vni 22002 self permanent
+00:00:00:00:00:00 dev vxlan1 dst 10.0.0.101 src_vni 22002 self permanent
+pat@pat:~$ sudo ip netns exec evpn-3 bridge fdb | grep "00:00:00:00:00:00"
+00:00:00:00:00:00 dev vxlan1 dst 10.0.0.102 src_vni 22003 self permanent
+00:00:00:00:00:00 dev vxlan1 dst 10.0.0.101 src_vni 22003 self permanent
+00:00:00:00:00:00 dev vxlan1 dst 10.0.0.102 src_vni 22001 self permanent
+00:00:00:00:00:00 dev vxlan1 dst 10.0.0.101 src_vni 22001 self permanent
+00:00:00:00:00:00 dev vxlan1 dst 10.0.0.102 src_vni 22002 self permanent
+00:00:00:00:00:00 dev vxlan1 dst 10.0.0.101 src_vni 22002 self permanent
+```
 
 
 

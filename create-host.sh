@@ -34,7 +34,5 @@ sed "s/__NUM__/$NUM/g" gobgp-host.conf > gobgp-host${NUM}.conf
 nohup ip netns exec evpn-${NUM} ./gobgpd -f gobgp-host${NUM}.conf > ./logs/gobgp-host${NUM}.log 2>&1 &
 
 sleep 0.5
-# Advertise VTEP
 
-#TODO: We need to uncomment this to make the host agent run
 nohup ip netns exec evpn-${NUM} ./host-agent/host_agent > ./logs/host-agent${NUM}.log 2>&1 &
