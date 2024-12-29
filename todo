@@ -1,1 +1,0 @@
-RT2 are now in BGP. host-agent must read them and create bridge FDB entries for all

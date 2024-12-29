@@ -50,4 +50,5 @@ ip netns exec ${PARENT_NS} ./gobgp global rib -a evpn add multicast 10.0.0.$((10
 
 # Announce the MAC address
 MAC_ADDRESS=$(ip netns exec ${SUBNS} cat /sys/class/net/eth0/address)
+echo $MAC_ADDRESS
 ip netns exec ${PARENT_NS} ./gobgp global rib -a evpn add macadv ${MAC_ADDRESS} 0.0.0.0 etag 0 label ${VNI} rd 10.0.0.$((100 + PARENT_NS_NUM)):${VNI} encap vxlan pmsi ingress-repl ${VNI} 10.0.0.$((100 + PARENT_NS_NUM))

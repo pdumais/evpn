@@ -22,7 +22,7 @@ ip netns exec ${NS} ip addr add 10.0.0.$((100 + NUM))/24 dev eth0
 ip netns exec ${NS} ip link add name br0 type bridge vlan_filtering 1
 ip netns exec ${NS} ip link add vxlan1 type vxlan dev eth0 dstport 4789 external  # Very important to use "external"
 ip netns exec ${NS} ip link set vxlan1 master br0
-ip netns exec ${NS} ip link set dev vxlan1 type bridge_slave vlan_tunnel on
+ip netns exec ${NS} ip link set dev vxlan1 type bridge_slave vlan_tunnel on learning off
 ip netns exec ${NS} bridge vlan del dev vxlan1 vid 1  # By default, vid 1 will exist, take it out
 ip netns exec ${NS} ip link set eth0 up
 ip netns exec ${NS} ip link set br0 up
