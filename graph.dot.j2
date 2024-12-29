@@ -1,0 +1,43 @@
+graph G {
+  layout=dot;
+  compound=true;
+  node [ shape = "box" ];
+  rankdir="LR";
+  splines=ortho;
+  concentrate=true
+
+  cloud [shape=rect, label="infra switch"]
+
+
+{% for host in data.hosts %}
+  subgraph "cluster_{{host}}" {
+    style = rounded;
+    label = "Host {{loop.index}}";
+
+    "eth0_{{host}}" [shape=rect, label="eth0\n{{host}}"]
+    {% for vtep in data.hosts[host].vteps -%}
+        "{{host}}:{{vtep.vtep }}:{{ vtep.vni }}" [color={{ data.colours[vtep.vni] }} label="vtep {{vtep.vni}}"];
+        "{{host}}:{{ vtep.vni }}" [color={{ data.colours[vtep.vni] }} label="vlan {{vtep.vlan}}" shape=ellipse];
+    {% endfor -%}
+    {% for node in data.hosts[host].nodes -%}
+        "{{host}}:{{ node.mac }}" [color={{ data.colours[node.vni] }} label="{{node.mac}}"];
+    {% endfor -%}
+  };
+{% endfor -%}
+
+{% for host in data.hosts %}
+{% for vtep in data.hosts[host].vteps -%}
+    "cloud" -- "eth0_{{host}}" []
+    "eth0_{{host}}" -- "{{host}}:{{vtep.vtep }}:{{ vtep.vni }}" [color={{ data.colours[vtep.vni] }}];
+    "{{host}}:{{vtep.vtep }}:{{ vtep.vni }}" -- "{{host}}:{{ vtep.vni }}" [color={{ data.colours[vtep.vni] }}];
+{% endfor -%}
+{% for node in data.hosts[host].nodes -%}
+    "{{host}}:{{ node.vni }}" -- "{{host}}:{{ node.mac }}"[color={{ data.colours[node.vni] }}];
+{% endfor -%}
+{% endfor -%}
+
+}
+
+
+
+

@@ -1,0 +1,29 @@
+graph G {
+  layout=neato;
+  compound=true;
+  splines=true;
+  rankdir="LR";
+  node [ shape = "box" ];
+  concentrate=true;
+  overlap=false;
+
+{% for host in data.hosts %}
+    {% for vtep in data.hosts[host].vteps -%}
+        "vtep:{{ vtep.vni }}" [color={{ data.colours[vtep.vni] }} label="VNI {{vtep.vni}}" style=filled fontcolor=white];
+    {% endfor -%}
+    {% for node in data.hosts[host].nodes -%}
+        "{{ node.mac }}" [color={{ data.colours[node.vni] }} label="{{node.mac}}"];
+    {% endfor -%}
+{% endfor -%}
+
+{% for host in data.hosts %}
+{% for node in data.hosts[host].nodes -%}
+    "vtep:{{ node.vni }}" -- "{{ node.mac }}"[color={{ data.colours[node.vni] }}];
+{% endfor -%}
+{% endfor -%}
+
+}
+
+
+
+

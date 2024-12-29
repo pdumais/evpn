@@ -197,6 +197,21 @@ pat@pat:~$ sudo ip netns exec evpn-3 bridge fdb | grep "00:00:00:00:00:00"
 00:00:00:00:00:00 dev vxlan1 dst 10.0.0.101 src_vni 22002 self permanent
 ```
 
+# Graphs
+I added a script to generate topology graphs using graphviz. Running `make graph` will generate 3 graphics. The graphics are generated from the information contained in the RIB of the spine BGP instance
+The first graphics represents the overall design with each endpoints, vlans and vtep connections.
+
+![](docs/graph.svg "Graph")
+
+The second one shows the network from a vlan point of view.
+
+
+![](docs/graph-vlans.svg "Graph")
+
+And the 3rd one is a map of the overlays
+
+
+![](docs/graph-overlay.svg "Graph")
 
 
 

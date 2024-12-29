@@ -12,23 +12,27 @@ SHELL := sudo /bin/bash
 
 create-vms:
 	./create-vm.sh 1 1 10.100.1.101/16 22001
+	./create-vm.sh 1 7 10.201.2.101/24 22004 # To offset the vlan numbers
 	./create-vm.sh 1 2 10.100.1.102/16 22001
 	./create-vm.sh 1 3 10.100.1.103/16 22001
-	./create-vm.sh 2 1 10.100.2.101/16 22001
-	./create-vm.sh 2 2 10.100.2.102/16 22001
-	./create-vm.sh 2 3 10.100.2.103/16 22001
-	./create-vm.sh 3 1 10.100.3.101/16 22001
-	./create-vm.sh 3 2 10.100.3.102/16 22001
-	./create-vm.sh 3 3 10.100.3.103/16 22001
 	./create-vm.sh 1 4 10.200.1.101/24 22002
 	./create-vm.sh 1 5 10.200.1.102/24 22002 # 1.102 should be able to ping 1.101 without exiting host
 	./create-vm.sh 1 6 10.200.2.101/24 22003
+
+	./create-vm.sh 2 1 10.100.2.101/16 22001
+	./create-vm.sh 2 2 10.100.2.102/16 22001
+	./create-vm.sh 2 3 10.100.2.103/16 22001
 	./create-vm.sh 2 4 10.200.1.103/24 22002  # 101 should be able to ping 103 across hosts with VNI 22002
 	./create-vm.sh 2 5 10.200.1.104/24 22003  # This is the 10.200.1.0/24 subnet on VNI 22003. 10.200.1.101 should NOT be able to ping
 	./create-vm.sh 2 6 10.200.2.102/24 22003  # 2.101 should be able to ping 2.102 across hosts using VNI 22003
+
+	./create-vm.sh 3 1 10.100.3.101/16 22001
+	./create-vm.sh 3 2 10.100.3.102/16 22001
+	./create-vm.sh 3 3 10.100.3.103/16 22001
 	./create-vm.sh 3 4 10.200.1.104/24 22002
 	./create-vm.sh 3 5 10.200.2.103/24 22003
 	./create-vm.sh 3 6 10.100.3.104/16 22002 # This should not be reachable since it is on another vlan
+	./create-vm.sh 3 7 10.200.2.104/24 22002 # This should not be reachable from 2.103 since it is on another vlan
 
 
 
@@ -110,6 +114,7 @@ test:
 	ip netns exec evpn-e16 ping -c1 -w2 -q 10.200.2.102 > /dev/null 2>&1
 	ip netns exec evpn-e16 ping -c1 -w2 -q 10.200.2.103 > /dev/null 2>&1
 	@if ip netns exec evpn-e33 ping -c1 -w1 -q 10.100.3.104 > /dev/null 2>&1; then exit 1; fi
+	@if ip netns exec evpn-e37 ping -c1 -w1 -q 10.200.2.103 > /dev/null 2>&1; then exit 1; fi
 	 
 
 	
@@ -133,3 +138,13 @@ tail-logs:
 	
 	#tmux resize-pane -t logsession:0.1 -y 70
 	tmux attach-session -t logsession
+
+# requires jinja2, graphviz
+graph:
+	ip netns exec evpn-controller ./gobgp global rib -a evpn -j > graph.json
+	cat graph.dot.j2 | python3 gengraph.py > graph.dot
+	cat graph.dot | dot -Tsvg > graph.svg
+	cat graph-vlans.dot.j2 | python3 gengraph.py > graph.dot
+	cat graph.dot | dot -Tsvg > graph-vlans.svg	
+	cat graph-overlay.dot.j2 | python3 gengraph.py > graph.dot
+	cat graph.dot | dot -Tsvg > graph-overlay.svg		

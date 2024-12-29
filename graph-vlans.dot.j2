@@ -1,0 +1,33 @@
+graph G {
+  layout=dot;
+  compound=true;
+  splines=ortho;
+  rankdir="LR";
+  node [ shape = "box" ];
+  concentrate=true;
+  overlap=false;
+
+{% for host in data.hosts %}
+    {% for vtep in data.hosts[host].vteps -%}
+        "vtep:{{ vtep.vni }}" [color={{ data.colours[vtep.vni] }} label="vtep {{vtep.vni}}"];
+        "vlan:{{ vtep.vlan }}:{{vtep.vni}}" [color={{ data.colours[vtep.vni] }} label="vlan {{vtep.vlan}}"  style=filled fontcolor=white];
+    {% endfor -%}
+    {% for node in data.hosts[host].nodes -%}
+        "{{ node.mac }}" [color={{ data.colours[node.vni] }} label="{{node.mac}}"];
+    {% endfor -%}
+{% endfor -%}
+
+{% for host in data.hosts %}
+{% for vtep in data.hosts[host].vteps -%}
+    "vtep:{{ vtep.vni }}" -- "vlan:{{ vtep.vlan }}:{{vtep.vni}}" [color={{ data.colours[vtep.vni] }}];
+{% endfor -%}
+{% for node in data.hosts[host].nodes -%}
+    "vlan:{{ data.hosts[host].vteps | selectattr('vni','==',node.vni) | map(attribute='vlan') | list | first}}:{{node.vni}}" -- "{{ node.mac }}"[color={{ data.colours[node.vni] }}];
+{% endfor -%}
+{% endfor -%}
+
+}
+
+
+
+
