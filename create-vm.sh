@@ -24,6 +24,7 @@ VNI=$4
 PARENT_NS=evpn-${PARENT_NS_NUM}
 VLAN=$(find_next_free_vlan ${VNI} ${PARENT_NS})
 SUBNS=evpn-e${PARENT_NS_NUM}${SUBNUM}
+MAC_ADDRESS=$(printf "02:20:20:%02x:%02x:%02x\n" $PARENT_NS_NUM $SUBNUM 1)
 
 ip netns exec ${PARENT_NS} ip link add veth1-${SUBNUM} type veth peer name veth2-${SUBNUM}
 ip netns exec ${PARENT_NS} ip link set veth1-${SUBNUM} master br0
@@ -32,12 +33,14 @@ ip netns add ${SUBNS}
 ip netns exec ${SUBNS} ip link set lo up
 ip netns exec ${PARENT_NS} ip link set veth2-${SUBNUM} netns ${SUBNS}
 ip netns exec ${SUBNS} ip link set veth2-${SUBNUM} name eth0
+ip netns exec ${SUBNS} ip link set dev eth0 address "$MAC_ADDRESS"
 ip netns exec ${SUBNS} ip link set eth0 up
 ip netns exec ${SUBNS} ip a a ${IP} dev eth0
 
 # We now need to set the vld on the veth
 ip netns exec ${PARENT_NS} bridge vlan add vid ${VLAN} pvid untagged dev veth1-${SUBNUM}
 ip netns exec ${PARENT_NS} bridge vlan del vid 1 dev veth1-${SUBNUM}
+
 
 # We need to add tunnel info on the vxlan interface
 ip netns exec ${PARENT_NS} bridge vlan add dev vxlan1 vid ${VLAN}
